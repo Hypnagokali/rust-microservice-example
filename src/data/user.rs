@@ -2,6 +2,9 @@ use core::fmt;
 use std::{sync::{Arc, Mutex}};
 use slab::Slab;
 
+use crate::data::repository::{BasicRepository};
+
+// Definitionen
 pub type UserId = u64;
 
 #[derive(Debug, Copy, Clone)]
@@ -17,20 +20,14 @@ pub struct InMemoryDataSource<T> {
     pub data_source: Arc<Mutex<Slab<T>>>,
 }
 
-pub trait BasicRepository<T> {
-    fn find_by_id(&self, id: u64) -> Result<T, String>;
-    fn save(&self, data: &T) -> Result<T, String>;
-}
 
-
-impl BasicRepository<UserData> for InMemoryDataSource<UserData> {
-    fn find_by_id(&self, id: u64) -> Result<UserData, String> {
-        let user_data = self.data_source.lock().unwrap();
-
+impl BasicRepository<UserData, UserId> for InMemoryDataSource<UserData> {
+    fn find_by_id(&self, id: UserId) -> Result<UserData, String> {
         if id < 1 {
-            return Err(String::from("ID < 1"));  
+            return Err(String::from("ID < 1"));
         }
 
+        let user_data = self.data_source.lock().unwrap();
         let id_in_slab = id - 1;
 
         if user_data.contains(id_in_slab as usize) {
@@ -41,7 +38,7 @@ impl BasicRepository<UserData> for InMemoryDataSource<UserData> {
     }
 
     fn save(&self, user_data: &UserData) -> Result<UserData, String> {
-        let mut saved_user = user_data.clone();
+        let saved_user = user_data.clone();
 
         let mut locked_data_source = self.data_source.lock().unwrap();
 
@@ -64,6 +61,27 @@ impl BasicRepository<UserData> for InMemoryDataSource<UserData> {
             updated_saved_user.id = (user_id + 1) as u64;
 
             Ok(*updated_saved_user)
+        }
+    }
+
+    fn delete(&self, data: &UserData) -> Result<(), String> {
+        if data.id < 1 {
+            return Err(String::from("ID < 1"));
+        }
+        
+        self.delete_by_id(data.id)
+    }
+
+    fn delete_by_id(&self, id: UserId) -> Result<(), String> {
+        let intern_id = (id -1) as usize;
+
+        let mut locked_data_source = self.data_source.lock().unwrap();
+
+        if locked_data_source.contains(intern_id) {
+            locked_data_source.remove(intern_id);
+            Ok(())
+        } else {
+            Err(format!("User not found. ID = {}", id))
         }
     }
 }

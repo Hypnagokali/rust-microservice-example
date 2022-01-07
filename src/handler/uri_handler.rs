@@ -1,5 +1,5 @@
 use crate::data::user::UserId;
-use crate::{pages::html_pages::INDEX_PAGE, data::user::{UserData, BasicRepository}};
+use crate::{pages::html_pages::INDEX_PAGE, data::{user::{UserData}, repository::{BasicRepository}}};
 use crate::handler::response_handler::{response, response_with_code};
 use crate::config::global_config::USER_PATH;
 
@@ -15,15 +15,56 @@ fn parse_resource_id(resource_base_path: &str, path: &str) -> Option<usize> {
 }
 
 
-pub fn default_handler(req: Request<Body>, data_source: &dyn BasicRepository<UserData>) -> impl Future<Output = Result<Response<Body>, Error>> {
+pub fn default_handler(req: Request<Body>, data_source: &dyn BasicRepository<UserData, UserId>) -> impl Future<Output = Result<Response<Body>, Error>> {
+    // todo: inject controller trait
+    // inject data_source in controller
+    // and: let res = controller.getResponse(req)
+
     let res = match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
             response(StatusCode::OK, Body::from(INDEX_PAGE))
         },
         (method, path) if path.starts_with(USER_PATH)=> {
-            let user_id = parse_resource_id(USER_PATH, path);
+            let user_id = parse_resource_id(
+                format!("{}/", USER_PATH).as_str(), 
+                &path
+            );
 
             match (method, user_id) {
+                (&Method::DELETE, Some(id)) => {
+                    let result = data_source.delete_by_id(id as UserId);
+
+                    match result {
+                        Ok(_) => {
+                            response_with_code(StatusCode::NO_CONTENT)
+                        }
+                        Err(e) => {
+                            response(StatusCode::BAD_REQUEST, Body::from(format!("{{ \"msg\":\"{}\" }}\n", e)))
+                        }
+                    }
+                },
+                (&Method::PUT, Some(id)) => {
+                    let user_data = data_source.find_by_id(id as UserId);
+                    match user_data {
+                        Ok(data) => {
+                            let putted_user_data = UserData {
+                                id: data.id,
+                            };
+                            
+                            let saved_data = data_source.save(&putted_user_data);
+
+                            if let Ok(res_data) = saved_data {
+                                Response::new(Body::from(res_data.to_string()))
+                            } else {
+                                response_with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                            }
+
+                        }
+                        Err(e) => {
+                            response(StatusCode::NOT_FOUND, Body::from(format!("{{ \"msg\":\"{}\" }}\n", e)))
+                        }
+                    }
+                },
                 (&Method::GET, Some(id)) => {
                     match data_source.find_by_id(id as u64) {
                         Ok(data) => {

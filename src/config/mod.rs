@@ -1,5 +1,5 @@
 pub mod global_config {
-    pub const USER_PATH: &str = "/user/";
+    pub const USER_PATH: &str = "/user";
 }
 
 pub mod server_config {
